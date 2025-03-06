@@ -1,1 +1,594 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+import os
 
+# For data preprocessing
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+# For classification model
+# 'lr', 'rf', 'lightgbm', 'gbc', 'xgboost'
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+
+# For deep learning model
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.metrics import AUC
+
+# For evaluation
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score, roc_curve, auc
+
+# Set display options to show all columns
+pd.set_option('display.max_columns', None)
+# Ignore warnings
+warnings.filterwarnings('ignore')
+
+!gdown 1yXC_IuIDyb73qpUTw5LfxYP8ag7N2Kr-
+
+!gdown 111qCWGjsz35fNvPPgRSQZQOuV6HGMeEi
+
+data = pd.read_csv("final_cleaned.csv")
+country_data = pd.read_csv("country_eu.csv")
+
+country_data = country_data.rename(columns={'country': 'country_eu'})
+
+data = pd.concat([country_data, data], axis=1)
+data
+
+data[data['gender']==0]
+
+# Drop the target variables of other papers
+used_data1 = data.copy()
+used_data2 = data.copy()
+used_data = data.copy()
+used_data1 = used_data1.drop(['mergeid','country','citizen','network_size','integration','closeness','network_satisfaction','grandchildren','look_after_grand','vision_d','glasses','walker','buggy','utensils','personal_alarm','bar','raised_toilet','incontinence','depression','pessimism','suicidality','guilt','sleep','interest','irritability','appetite','fatigue','concentration','enjoyment','tearfulness','adls','mobility','uppermo','lowermo','lgmuscle','grossmo','finemo','fall','date_day','memory','imword_recall','deword_recall','serial_7','verbal',
+                  'dairy','legeggs','meat','hours_work','personal_care_hour','domestic_task_hour','meal_week','nursing_home_week','receive_help_freq','given_help_freq','activity_help','help_meet_need','long_term','bond_stock_funds','bank_account','value_house','value_business','value_car','oldage_pension','occupational_pension','disability_pension','unemployment_benefits','social_assistance','sickness_benefit','private_pensions','private_transfer','given_gift_250','given_gift_5000','receive_gift_250','receive_gift_5000','rent_expenditure','hh_cosumption','unafford_food',
+                  'hh_real_asset','hh_gross_asset','hh_net_asset','hh_net_worth','employment','course','club','organization','read','games','card','companionship','leftout','isolated','lonely','extraversion','aggreeableness','conscientiousness','neuroticism','openess','forgo_cost','forgo_available','bmi','bmi_cate','overweight'], axis=1)
+used_data2 = used_data2.drop(['mergeid','country','citizen','network_size','integration','closeness','network_satisfaction','grandchildren','look_after_grand','vision_d','glasses','walker','buggy','utensils','personal_alarm','bar','raised_toilet','incontinence','depression','pessimism','suicidality','guilt','sleep','interest','irritability','appetite','fatigue','concentration','enjoyment','tearfulness','adls','mobility','uppermo','lowermo','lgmuscle','grossmo','finemo','fall','date_day','memory','imword_recall','deword_recall','serial_7','verbal',
+                  'dairy','legeggs','meat','hours_work','personal_care_hour','domestic_task_hour','meal_week','nursing_home_week','receive_help_freq','given_help_freq','activity_help','help_meet_need','long_term','bond_stock_funds','bank_account','value_house','value_business','value_car','oldage_pension','occupational_pension','disability_pension','unemployment_benefits','social_assistance','sickness_benefit','private_pensions','private_transfer','given_gift_250','given_gift_5000','receive_gift_250','receive_gift_5000','rent_expenditure','hh_cosumption','unafford_food',
+                  'hh_real_asset','hh_gross_asset','hh_net_asset','hh_net_worth','employment','course','club','organization','read','games','card','companionship','leftout','isolated','lonely','extraversion','aggreeableness','conscientiousness','neuroticism','openess','forgo_cost','forgo_available','bmi','bmi_cate','overweight'], axis=1)
+
+# DataFrame=used_data
+# used_data = used_data.loc[used_data['mammogram'] != 'non_applicable']
+used_data1 = used_data1[used_data1['mammogram'] != 'non_applicable']
+used_data1
+
+# definition of mammogram, colon
+# mammogram
+used_data1['mammogram'] = (
+    (used_data1['gender'] == 1) &  
+    (used_data1['age'] >= 45) &   
+    (used_data1['age'] <= 74)
+).astype(int)  (1 or 0)
+# colon
+# used_data2['colon'] = (
+#      (used_data2['age'] >= 50) &  
+#      (used_data2['age'] <= 60)   
+#  ).astype(int) (1 or 0)
+# used_data2 = used_data2[(used_data2['age'] >= 50) & (used_data2['age'] <= 60)]
+# used_data2
+used_data2['colon'] = used_data2.apply(
+    lambda row: row['colon'] if 50 <= row['age'] <= 60 else 1,
+    axis=1
+)
+#used_data2 = used_data2[(used_data2['age'] >= 50) & (used_data2['age'] <= 60)]
+used_data2
+
+#derived_preventive_care (exclude 'mammogram')
+
+vaccination = used_data2['vaccination']
+eye_exam = used_data2['eye_exam']
+colon = used_data2['colon']
+dental = used_data2['dental']
+
+conditions = [
+    (vaccination == 0) | (eye_exam == 0) | (colon == 0) | (dental == 0),  
+    (vaccination == 1) & (eye_exam == 1) & (colon == 1) & (dental == 1) 
+]
+choices = [1, 0] 
+used_data2['preventive_care'] = np.select(conditions, choices, default=np.nan)
+
+# derived_income
+used_data2['income'] = used_data2['income_work']+ used_data2['income_self_work'] + used_data2['income_house']
+# Delete the original variable
+used_data2.drop(columns=['income_work', 'income_self_work', 'income_house'], inplace=True)
+
+#derived_wheelchair
+
+manual_wheelchair = used_data['manual_wheelchair']
+eletric_wheelchair = used_data['eletric_wheelchair']
+conditions = [
+    (manual_wheelchair == 1) | (eletric_wheelchair == 1),
+    (manual_wheelchair == 0) & (eletric_wheelchair == 0)
+]
+choices = [1, 0]
+used_data['wheelchair'] = np.select(conditions, choices, default=np.nan)
+# Delete the original variable
+used_data.drop(columns=['manual_wheelchair', 'eletric_wheelchair'], inplace=True)
+
+# Drop the target variables of other papers
+target_vars = ['preventive_care', 'vaccination', 'eye_exam', 'mammogram', 'colon', 'dental']
+######################################
+target_var = 'preventive_care'
+######################################
+other_target_vars = [var for var in target_vars if var != target_var]
+used_data2 = used_data2.drop(other_target_vars, axis=1)
+used_data.shape
+
+binary_categorical_candidates = [col for col in used_data2.columns
+                                 if set(used_data2[col].dropna().unique()) == {1, 2}  
+                                 and used_data2[col].dtype in ['int64', 'object']] 
+
+binary_categorical_candidates
+
+for col in binary_categorical_candidates:
+    used_data2[col] = used_data2[col].replace({1: 0, 2: 1})
+
+categorical_candidates = [col for col in used_data2.columns
+                          if used_data2[col].dtype in ['int64', 'object']  
+                          and used_data2[col].nunique() > 2  
+                          and used_data2[col].nunique() < 30] 
+print("可能是類別變數的欄位:", categorical_candidates)
+
+# one-hot encoding
+used_data2 = pd.get_dummies(used_data2, columns=categorical_candidates, dtype=int)
+
+X = used_data2.drop(target_var, axis=1)
+y = used_data2[target_var]
+X = X.astype('float32')
+y = y.astype('float32')
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train.shape, X_test.shape, y_train.shape, y_test.shape
+
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.activations import relu
+from tensorflow.keras.optimizers import Adam
+
+def create_dnn_model(dim):
+    model = Sequential()
+    model.add(Dense(256, input_dim=dim, activation=relu))  # 增加 Neurons
+    model.add(BatchNormalization())  # 加入 Batch Normalization
+    model.add(Dropout(0.3))  # Dropout 降低 Overfitting
+
+    model.add(Dense(128, activation=relu))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+
+    model.add(Dense(64, activation=relu))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+
+    model.add(Dense(32, activation=relu))
+    model.add(Dropout(0.1))
+
+    model.add(Dense(1, activation='sigmoid'))  # 使用 `sigmoid` 進行二元分類
+
+    # 降低 Learning Rate，使用 Adam 優化器
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=[AUC(name='auroc')])
+    return model
+def create_fcn_model(dim):
+    model = Sequential()
+    model.add(Dense(256, input_dim=dim, activation=relu))  # 增加 Neurons
+    model.add(BatchNormalization())  # 加入 Batch Normalization
+
+    model.add(Dense(128, activation=relu))
+    model.add(BatchNormalization())
+
+    model.add(Dense(64, activation=relu))
+    model.add(BatchNormalization())
+
+    model.add(Dense(32, activation=relu))
+
+    model.add(Dense(1, activation='sigmoid'))  # 使用 `sigmoid` 進行二元分類
+
+    # 降低 Learning Rate，使用 Adam 優化器
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=[AUC(name='auroc')])
+    return model
+# 定義所有模型
+models = {
+    'DNN': lambda X: create_dnn_model(dim=X.shape[1]),
+    'FCN': lambda X: create_fcn_model(dim=X.shape[1]),
+    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
+    'Random Forest': RandomForestClassifier(random_state=42),
+    'XGBoost': XGBClassifier(eval_metric='logloss', random_state=42),
+    'Gradient Boosting': GradientBoostingClassifier(random_state=42),
+    'LightGBM': LGBMClassifier(random_state=42, force_row_wise=True, verbose=-1)
+}
+#Group Splitting
+groups = {
+    'Croatia': X['country_eu_47'] == 1,
+    'Belgium': X['country_eu_23'] == 1,
+    'Estonia': X['country_eu_35'] == 1,
+    'Germany': X['country_eu_12'] == 1,
+    'Italy': X['country_eu_16'] == 1,
+    'Austria': X['country_eu_11'] == 1,
+    'Czech Republic': X['country_eu_28'] == 1,
+    'Greece': X['country_eu_19'] == 1,
+    'France': X['country_eu_17'] == 1,
+    'Denmark': X['country_eu_18'] == 1,
+    'Spain': X['country_eu_15'] == 1,
+    'Switzerland': X['country_eu_20'] == 1,
+    'Hungary': X['country_eu_32'] == 1,
+    'Finland': X['country_eu_55'] == 1,
+    'Latvia': X['country_eu_57'] == 1,
+    'Lithuania': X['country_eu_48'] == 1,
+    'Low income': X['economic_status'] == 0,
+    'High income': X['economic_status'] == 1,
+    'Low education': X['edu_lv_0'] == 1,
+    'Medium education': X['edu_lv_1'] == 1,
+    'High education': X['edu_lv_2'] == 1,
+}
+def cross_validation_models(X, y, socioeconomic_groups, models, cv=5):
+    skf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
+    all_results = []
+
+    for model_name, model_func in models.items():
+        print(f"Starting cross-validation: {model_name}...")
+
+        results_table = []
+
+        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X, y), start=1):
+            print(f"{model_name} - Fold {fold_idx} Traning...")
+
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+            if model_name in ['DNN', 'FCN']:
+                model = model_func(X_train)
+                model.fit(X_train, y_train, epochs=30, batch_size=64, verbose=0, validation_split=0.1)
+            else:
+                model = model_func
+                model.fit(X_train, y_train)
+
+            print(f"{model_name} - Fold {fold_idx} Training completed")
+
+            for group_name, group_filter in groups.items():
+                X_group = X_test[group_filter]
+                y_group = y_test[group_filter]
+
+                if X_group.shape[0] == 0:
+                    continue
+
+                # prediction
+                y_proba = model.predict(X_group).ravel() if model_name in ['DNN', 'FCN'] else model.predict_proba(X_group)[:, 1]
+                y_pred = (y_proba > 0.5).astype(int)
+
+                from sklearn.metrics import confusion_matrix
+
+                # Compute the confusion matrix
+                cm = confusion_matrix(y_group, y_pred)
+
+                # Handle cases where the confusion matrix has fewer than two rows
+                if cm.shape[0] < 2:  # Single-class scenario
+                    print(f"Warning: Single-class detected in group '{group_name}'. Confusion matrix:\n{cm}")
+                    tpr = 0  # True Positive Rate
+                    fpr = 0  # False Positive Rate
+                else:
+                # Compute TPR and FPR if both classes are present
+                    tpr = cm[1, 1] / cm[1].sum() if cm[1].sum() > 0 else 0
+                    fpr = cm[0, 1] / cm[0].sum() if cm[0].sum() > 0 else 0
+
+                # Append results
+                results_table.append({
+                    "group": group_name,
+                    "accuracy": accuracy_score(y_group, y_pred),
+                    "precision": precision_score(y_group, y_pred, zero_division=0),
+                    "recall": recall_score(y_group, y_pred, zero_division=0),
+                    "f1": f1_score(y_group, y_pred, zero_division=0),
+                    "roc_auc": roc_auc_score(y_group, y_proba) if len(set(y_group)) > 1 else None,
+                    "demographic_parity": y_pred.mean(),
+                    "equalized_odds_tpr": tpr,
+                    "equalized_odds_fpr": fpr,
+                    "model": model_name
+                })
+
+        results_df = pd.DataFrame(results_table)
+        numeric_columns = [col for col in results_df.columns if col not in ["group", "model"]]
+        results_avg = results_df.groupby("group")[numeric_columns].mean().reset_index()
+
+        results_avg["group"] = pd.Categorical(results_avg["group"], categories=groups.keys(), ordered=True)
+        results_avg = results_avg.sort_values("group").reset_index(drop=True)
+
+        results_avg["model"] = model_name
+
+        all_results.append(results_avg)
+
+    final_results = pd.concat(all_results, ignore_index=True)
+    return final_results
+results_df = cross_validation_models(X, y, groups, models)
+results_df
+
+pd.set_option('display.max_rows', None)  
+pd.set_option('display.max_columns', None)  
+results_df
+
+# ROC curves
+# Train models
+final_models = {}
+
+# Train Logistic Regression
+model_lr = LogisticRegression(max_iter=1000, random_state=42)
+model_lr.fit(X_train, y_train)
+final_models['Logistic Regression'] = model_lr
+
+# Train Random Forest
+model_rf = RandomForestClassifier(random_state=42)
+model_rf.fit(X_train, y_train)
+final_models['Random Forest'] = model_rf
+
+# Train XGBoost
+model_xgb = XGBClassifier(eval_metric='logloss', random_state=42)
+model_xgb.fit(X_train, y_train)
+final_models['XGBoost'] = model_xgb
+
+# Train Gradient Boosting
+model_gb = GradientBoostingClassifier(random_state=42)
+model_gb.fit(X_train, y_train)
+final_models['Gradient Boosting'] = model_gb
+
+# Train LightGBM
+model_lgbm = LGBMClassifier(random_state=42, force_row_wise=True, verbose=-1)
+model_lgbm.fit(X_train, y_train)
+final_models['LightGBM'] = model_lgbm
+
+# Train DNN
+model_dnn = create_dnn_model(dim=X_train.shape[1])
+model_dnn.fit(X_train, y_train, epochs=30, batch_size=64, verbose=0, validation_split=0.1)
+final_models['DNN'] = model_dnn
+
+# Train FCN
+model_fcn = create_fcn_model(dim=X_train.shape[1])
+model_fcn.fit(X_train, y_train, epochs=30, batch_size=64, verbose=0, validation_split=0.1)
+final_models['FCN'] = model_fcn
+# Plot ROC Curves
+plt.figure(figsize=(10, 10))
+
+# Plot ROC Curves for all models
+for model_name, model in final_models.items():
+    if model_name in ['DNN', 'FCN']:
+        y_proba = model.predict(X_test).ravel()
+    else:
+        y_proba = model.predict_proba(X_test)[:, 1]
+
+    # Calculate ROC curve
+    fpr, tpr, _ = roc_curve(y_test, y_proba)
+    auc = roc_auc_score(y_test, y_proba)
+
+    # Plot ROC curve
+    plt.plot(fpr, tpr, label=f"{model_name} (AUC = {auc:.2f})")
+
+# Plot the random guess ROC curve
+plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Guess')
+
+# Format plot
+plt.xlim([0, 1])
+plt.ylim([0, 1])
+plt.xlabel('False Positive Rate', fontsize=24)
+plt.ylabel('True Positive Rate', fontsize=24)
+plt.title('ROC Curves', fontsize=26)
+plt.legend(fontsize=20)
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+
+# Show the plot
+plt.show()
+
+socioeconomic_groups = {
+    'Low income': X['economic_status'] == 0,
+    'High income': X['economic_status'] == 1,
+    'Low education': X['edu_lv_0'] == 1,
+    'Medium education': X['edu_lv_1'] == 1,
+    'High education': X['edu_lv_2'] == 1,
+}
+
+# Country groups
+country_groups = {
+    'Croatia': 'country_eu_47',
+    'Belgium': 'country_eu_23',
+    'Estonia': 'country_eu_35',
+    'Germany': 'country_eu_12',
+    'Italy': 'country_eu_16',
+    'Australia': 'country_eu_11',
+    'Czech Republic': 'country_eu_28',
+    'Greece': 'country_eu_19',
+    'France': 'country_eu_17',
+    'Denmark': 'country_eu_18',
+    'Spain': 'country_eu_15',
+    'Switzerland': 'country_eu_20',
+    'Hungary': 'country_eu_32',
+    'Finland': 'country_eu_55',
+    'Latvia': 'country_eu_57',
+    'Lithuania': 'country_eu_48',
+}
+plt.figure(figsize=(12, 12))
+
+country_results = []
+
+# Model traning
+model_lgbm = LGBMClassifier(random_state=42, force_row_wise=True, verbose=-1)
+
+model_lgbm.fit(X_train, y_train)
+
+for country, column_name in country_groups.items():
+    if column_name not in X_test.columns:  
+        print(f"Warning: Column {column_name} not found in X_test. Skipping {country}.")
+        continue
+
+    group_filter = X_test[column_name] == 1
+    X_group = X_test[group_filter]
+    y_group = y_test[group_filter]
+
+    if len(X_group) > 0: 
+        n_samples = len(X_group)
+        y_proba = model_lgbm.predict_proba(X_group)[:, 1]
+        fpr, tpr, _ = roc_curve(y_group, y_proba)
+        roc_auc = roc_auc_score(y_group, y_proba)
+
+        country_results.append((country, fpr, tpr, roc_auc, n_samples))
+
+country_results = sorted(country_results, key=lambda x: x[3], reverse=True)
+
+for country, fpr, tpr, roc_auc, n_samples in country_results:
+    plt.plot(fpr, tpr, label=f"{country} (AUC = {roc_auc:.2f}, n = {n_samples})")
+
+plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Guess')
+
+plt.xlim([0, 1])
+plt.ylim([0, 1])
+plt.xlabel('False Positive Rate', fontsize=14)
+plt.ylabel('True Positive Rate', fontsize=14)
+plt.title('ROC Curves by Country for LightGBM', fontsize=16)
+plt.legend(fontsize=10, loc='lower right')
+plt.grid(True)
+
+plt.show()
+
+
+country_groups = {
+    'Croatia': 'country_eu_47',
+    'Belgium': 'country_eu_23',
+    'Estonia': 'country_eu_35',
+    'Germany': 'country_eu_12',
+    'Italy': 'country_eu_16',
+    'Australia': 'country_eu_11',
+    'Czech Republic': 'country_eu_28',
+    'Greece': 'country_eu_19',
+    'France': 'country_eu_17',
+    'Denmark': 'country_eu_18',
+    'Spain': 'country_eu_15',
+    'Switzerland': 'country_eu_20',
+    'Hungary': 'country_eu_32',
+    'Finland': 'country_eu_55',
+    'Latvia': 'country_eu_57',
+    'Lithuania': 'country_eu_48',
+}
+#Group Splitting_economic/ education
+socioeconomic_groups = {
+    'Low income': X['economic_status'] == 0,
+    'High income': X['economic_status'] == 1,
+    'Low education': X['edu_lv_0'] == 1,
+    'Medium education': X['edu_lv_1'] == 1,
+    'High education': X['edu_lv_2'] == 1,
+    }
+from sklearn.model_selection import StratifiedKFold
+from scipy.interpolate import interp1d
+from sklearn.metrics import auc
+
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+n_countries = len(country_groups)
+n_rows = 5
+n_cols = 5
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 20), sharex=True, sharey=True)
+axes = axes.flatten()
+
+mean_fpr = np.linspace(0, 1, 100)  
+for idx, (country, column_name) in enumerate(country_groups.items()):
+    if idx >= n_rows * n_cols:
+        break
+
+    ax = axes[idx]
+    print(f"Processing country: {country}")
+
+    tprs = []
+    aucs = []
+    fold_samples = []  
+
+    # 5 K-fold validation
+    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(X, y)):
+        # Spliting
+        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+        model_lgbm = LGBMClassifier(random_state=42, force_row_wise=True, verbose=-1)
+        model_lgbm.fit(X_train, y_train)
+
+        if column_name not in X_test.columns:
+            continue
+        country_filter = X_test[column_name] == 1
+        X_country = X_test[country_filter]
+        y_country = y_test[country_filter]
+
+        if len(y_country) == 0: 
+            continue
+
+        y_proba_country = model_lgbm.predict_proba(X_country)[:, 1]
+
+        fpr, tpr, _ = roc_curve(y_country, y_proba_country)
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+
+        interp_tpr = interp1d(fpr, tpr, kind='linear', fill_value='extrapolate')(mean_fpr)
+        interp_tpr[0] = 0.0  
+        tprs.append(interp_tpr)
+
+        fold_samples.append(len(y_country))
+
+        ax.plot(fpr, tpr, lw=1, label=f"Fold {fold_idx + 1} (AUC = {roc_auc:.2f}, n={len(y_country)})")
+
+    mean_tpr = np.mean(tprs, axis=0) if tprs else np.zeros_like(mean_fpr)
+    std_tpr = np.std(tprs, axis=0) if tprs else np.zeros_like(mean_fpr)
+    mean_tpr[-1] = 1.0  
+    mean_auc = np.mean(aucs) if aucs else 0
+    std_auc = np.std(aucs) if aucs else 0
+
+    ax.plot(mean_fpr, mean_tpr, color='b', lw=2, label=f"Mean ROC (AUC = {mean_auc:.2f})")
+    ax.fill_between(mean_fpr,
+                    np.maximum(mean_tpr - std_tpr, 0),
+                    np.minimum(mean_tpr + std_tpr, 1),
+                    color='blue', alpha=0.2, label=r"$\pm$ 1 std. dev.")
+
+    ax.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Guess')
+    ax.set_title(f"{country}", fontsize=12)
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.legend(fontsize=8, loc='lower right')
+
+for i in range(len(country_groups), len(axes)):
+    fig.delaxes(axes[i])
+
+fig.suptitle("ROC Curves for Each Country (5-Fold Cross Validation)", fontsize=16)
+plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+plt.show()
+
+category_distribution = {}
+
+for country, column_name in country_groups.items():
+    if column_name in used_data2.columns: 
+        value_counts = used_data2[used_data2[column_name] == 1]["preventive_care"].value_counts()
+        category_distribution[country] = value_counts.to_dict() 
+
+distribution_df = pd.DataFrame(category_distribution).fillna(0).astype(int)
+distribution_df
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+# ['group', 'accuracy', 'model']
+def plot_heatmap(results_df, value_col='roc_auc', title='Model Accuracy Heat Map'):
+
+    heatmap_data = results_df.pivot_table(index='model', columns='group', values=value_col, aggfunc='mean')
+
+    # Heat Map
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="coolwarm", cbar_kws={'label': value_col})
+    plt.title(title)
+    plt.ylabel('Model')
+    plt.xlabel('Group')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+plot_heatmap(results_df, value_col='roc_auc', title='Overall Preventive care Model: ROC_AUC Heat Map by Subgroup')
